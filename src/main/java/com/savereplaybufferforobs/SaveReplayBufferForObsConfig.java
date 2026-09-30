@@ -61,8 +61,8 @@ public interface SaveReplayBufferForObsConfig extends Config
     default int activityPrePercent() { return 1; }
 
     @Range(min = 0, max = 10)
-    @ConfigItem(keyName = "activityPostPercent", name = "Activity post-padding (%)", description = "Wait this percentage of activity duration after the capture trigger, plus Rewards delay. Default 1%.", section = proSection, position = 7)
-    default int activityPostPercent() { return 1; }
+    @ConfigItem(keyName = "activityPostPercent", name = "Activity post-padding (%)", description = "Wait this percentage of activity duration after the capture trigger, plus Rewards delay. Default 5%.", section = proSection, position = 7)
+    default int activityPostPercent() { return 5; }
 
     @ConfigItem(
             keyName = "checkReplayBufferActive",

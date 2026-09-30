@@ -87,6 +87,15 @@ public class ObsClipTest
         assertTrue(error.contains("not active")); // A successful clip leaves a real health warning alone.
     }
 
+    @Test
+    public void clampedClipWarnsUntilAFullLengthClipSaves()
+    {
+        respond("{\"result\":true}", "{\"responseData\":{\"accepted\":true,\"durationSeconds\":3600,\"clamped\":true}}");
+        assertTrue(error.contains("3600s OBS replay buffer"));
+        respond("{\"result\":true}", "{\"responseData\":{\"accepted\":true,\"durationSeconds\":120,\"clamped\":false}}");
+        assertNull(error);
+    }
+
     private void health(boolean active)
     {
         listener.onMessage(null, "{\"op\":7,\"d\":{\"requestType\":\"GetReplayBufferStatus\",\"responseData\":{\"outputActive\":" + active + "}}}");

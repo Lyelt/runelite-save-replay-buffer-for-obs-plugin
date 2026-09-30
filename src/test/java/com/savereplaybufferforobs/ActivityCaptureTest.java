@@ -31,6 +31,7 @@ public class ActivityCaptureTest
         public boolean captureInferno() { return true; }
         public boolean captureColosseum() { return true; }
         public boolean captureDoom() { return true; }
+        public int activityPostPercent() { return 1; } // Expected clip lengths below assume 1%.
     };
     private long now;
     private final List<Runnable> callbacks = new ArrayList<>();
@@ -411,6 +412,44 @@ public class ActivityCaptureTest
         state.setGameState(GameState.LOGIN_SCREEN);
         plugin.onGameStateChanged(state);
         assertEquals(2, callbacks.size());
+    }
+
+    @Test
+    public void loggingOutToPauseSavesAndLoggingBackInStartsANewCapture() throws Exception
+    {
+        SaveReplayBufferForObsPlugin plugin = new SaveReplayBufferForObsPlugin();
+        setField(plugin, "activityCapture", capture);
+        setField(plugin, "config", config);
+        GameStateChanged logout = new GameStateChanged();
+        logout.setGameState(GameState.LOGIN_SCREEN);
+        for (ActivityCapture.Activity activity : new ActivityCapture.Activity[]{ActivityCapture.Activity.INFERNO, ActivityCapture.Activity.COX})
+        {
+            capture.cancel();
+            callbacks.clear();
+            dueTimes.clear();
+            requests.clear();
+            now = 0;
+            start(activity);
+            now = TimeUnit.MINUTES.toNanos(30);
+            plugin.onGameStateChanged(logout); // Logging out to pause saves the first part.
+            assertEquals(1, callbacks.size());
+            run(0);
+            assertEquals(Integer.valueOf(1836), requests.get(0));
+
+            now = TimeUnit.MINUTES.toNanos(60);
+            start(activity); // Logged back in, still inside: a fresh capture from here.
+            now = TimeUnit.MINUTES.toNanos(70);
+            capture.locationChanged(new WorldPoint(3200, 3200, 0), false, config);
+            assertEquals(2, callbacks.size());
+            run(1);
+            assertEquals(Integer.valueOf(612), requests.get(1));
+        }
+    }
+
+    @Test
+    public void postPaddingDefaultsToFivePercent()
+    {
+        assertEquals(5, new SaveReplayBufferForObsConfig() { }.activityPostPercent());
     }
 
     @Test
