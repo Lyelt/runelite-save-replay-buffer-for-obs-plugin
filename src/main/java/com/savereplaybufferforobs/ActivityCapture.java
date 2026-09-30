@@ -1,6 +1,3 @@
-/* Activity detection adapted from Blert, Copyright (c) 2023-2025 Alexei Frolov.
- * Distributed under the MIT license in docs/blert-license.txt (also packaged in META-INF).
- */
 package com.savereplaybufferforobs;
 
 import java.util.HashSet;
@@ -92,7 +89,6 @@ final class ActivityCapture
         }
     }
 
-    // Blert 9527dfdd5586f8ae9aacf51ded63fe0fabb95417; ToA regions from Plugin Hub's ToA plugin.
     static Activity sessionAt(WorldPoint point)
     {
         switch (point.getRegionID())

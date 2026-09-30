@@ -50,10 +50,6 @@ Your OBS replay buffer must be long enough for the whole activity plus padding, 
 The plugin sends OBS WebSocket `CallVendorRequest` with vendor `replay-buffer-pro`, request `SaveClip` and
 `{"durationSeconds": N}`. If OBS reports an unknown vendor, Replay Buffer Pro is missing or too old.
 
-Activity detection is adapted from [Blert](https://github.com/blert-io/plugin) (MIT license, see
-[docs/blert-license.txt](docs/blert-license.txt)). ToA regions come from the
-[Tombs of Amascut plugin](https://github.com/LlemonDuck/tombs-of-amascut).
-
 ## Detailed setup instructions
 
 Below is a more detailed step-by-step guide for plugin setup, with reference pictures.
