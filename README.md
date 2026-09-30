@@ -44,7 +44,7 @@ can save a clip covering an entire activity instead of the whole buffer. Turn on
 - **Activity pre-padding** (default 1% of the activity length) adds footage before the start. **Activity post-padding** (default 5%) waits after the end, plus the **Rewards** delay, before saving.
 - If the OBS replay buffer is shorter than the requested clip, Replay Buffer Pro saves the whole buffer instead, and the plugin warns you in chat.
 - While an activity is enabled and being captured, it replaces the regular boss-kill, death, screenshot and rewards saves for that activity. If no capture was running (for example, the toggle was turned on mid-raid), the regular saves apply.
-- A chat message tells you when a recording starts and when its clip will be saved. What triggered each start and end is written to the RuneLite debug log (`--debug`).
+- A chat message tells you when a recording starts, when its clip will be saved, and when a clip couldn't be saved and what to fix. What triggered each start and end is written to the RuneLite debug log (`--debug`).
 
 Your OBS replay buffer must be long enough for the whole activity plus padding, up to Replay Buffer Pro's maximum of 6 hours.
 The plugin sends OBS WebSocket `CallVendorRequest` with vendor `replay-buffer-pro`, request `SaveClip` and

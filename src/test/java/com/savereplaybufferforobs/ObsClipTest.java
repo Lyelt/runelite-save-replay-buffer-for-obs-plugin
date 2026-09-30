@@ -27,10 +27,11 @@ public class ObsClipTest
     private final WebSocketListenerForObs listener = new WebSocketListenerForObs(client, gson, "", feedback);
 
     @Test
-    public void sendsExactVendorContractAndRejectsInvalidOrDisconnectedRequests() throws Exception
+    public void sendsExactVendorContractAndTellsYouWhenDisconnected() throws Exception
     {
         client.saveClip(60);
-        assertTrue(error.contains("not connected"));
+        assertEquals("Your replay clip wasn't saved because OBS isn't connected.", chat);
+        assertNull(error); // One-off problems go to chat, not a lasting overlay.
         Field socket = WebSocketClientForObs.class.getDeclaredField("webSocket");
         socket.setAccessible(true);
         socket.set(client, new WebSocket()
@@ -43,8 +44,6 @@ public class ObsClipTest
             public void cancel() { }
         });
         client.setConnected(true);
-        client.saveClip(0);
-        assertNull(sent);
         client.saveClip(1234);
         JsonObject envelope = gson.fromJson(sent, JsonObject.class);
         assertEquals(6, envelope.get("op").getAsInt());
@@ -61,40 +60,37 @@ public class ObsClipTest
     }
 
     @Test
-    public void handlesRefusalMissingVendorAndAcceptanceWithoutClaimingCompletion()
+    public void refusedClipsExplainTheFixInChat()
     {
         respond("{\"result\":false,\"comment\":\"Unknown vendor\"}", "{}");
-        assertTrue(error.contains("Unknown vendor"));
-        respond("{\"result\":true}", "{\"responseData\":{\"accepted\":false,\"error\":\"Replay buffer is inactive\"}}");
-        assertTrue(error.contains("inactive"));
-        listener.onMessage(null, "{\"op\":7,\"d\":{\"requestType\":\"GetReplayBufferStatus\",\"responseData\":{\"outputActive\":true}}}");
-        assertTrue(error.contains("inactive")); // Health checks must not erase a save refusal.
-        respond("{\"result\":true}", "{\"responseData\":{\"accepted\":true}}");
-        assertNull(error);
+        assertEquals("OBS couldn't save your replay clip. Make sure the Replay Buffer Pro OBS plugin is installed and up to date.", chat);
+        respond("{\"result\":true}", "{\"responseData\":{\"accepted\":false,\"error\":\"buffer-inactive\"}}");
+        assertEquals("OBS couldn't save your replay clip. The OBS replay buffer wasn't running; start it in OBS.", chat);
         respond("{\"result\":true}", "{}");
-        assertTrue(error.contains("invalid acceptance"));
+        assertTrue(chat.startsWith("OBS couldn't save your replay clip."));
+        assertNull(error);
+
+        chat = null;
+        respond("{\"result\":true}", "{\"responseData\":{\"accepted\":true}}");
+        assertNull(chat); // A normal save stays quiet.
     }
 
     @Test
-    public void healthAndClipResultsOnlyClearTheirOwnWarnings()
+    public void healthWarningsStayOnlyWhileTheBufferIsOff()
     {
-        respond("{\"result\":false,\"comment\":\"Unknown vendor\"}", "{}");
         health(false);
         assertTrue(error.contains("not active"));
-        health(true);
-        assertNull(error); // A recovered buffer never leaves the inactive warning stuck.
-
-        health(false);
         respond("{\"result\":true}", "{\"responseData\":{\"accepted\":true}}");
         assertTrue(error.contains("not active")); // A successful clip leaves a real health warning alone.
+        health(true);
+        assertNull(error);
     }
 
     @Test
-    public void clampedClipWarnsOnceInChatWithoutAnOverlay()
+    public void clampedClipWarnsOnceInChat()
     {
-        respond("{\"result\":false,\"comment\":\"Unknown vendor\"}", "{}");
         respond("{\"result\":true}", "{\"responseData\":{\"accepted\":true,\"durationSeconds\":3600,\"clamped\":true}}");
-        assertNull(error); // It still counts as saved, clearing the earlier clip error.
+        assertNull(error);
         assertEquals("Your replay clip was shortened to 1:00:00, the length of your OBS replay buffer."
             + " Increase it in OBS to capture whole activities.", chat);
     }

@@ -14,6 +14,7 @@ import java.security.NoSuchAlgorithmException;
 import java.text.Format;
 import java.text.MessageFormat;
 import java.util.Base64;
+import java.util.Map;
 import java.util.Objects;
 
 @Slf4j
@@ -28,7 +29,11 @@ public class WebSocketListenerForObs extends WebSocketListener {
 
     private final WebSocketClientForObs client;
     private static final ObsException REPLAY_BUFFER_INACTIVE = new ObsException("OBS Replay Buffer is not active!");
-    private ObsException clipError;
+    // Replay Buffer Pro SaveClip error codes the player can act on.
+    private static final Map<String, String> CLIP_ERROR_HELP = Map.of(
+        "buffer-inactive", "The OBS replay buffer wasn't running; start it in OBS.",
+        "save-refused", "OBS refused the save; check that recording isn't paused.",
+        "unavailable", "OBS was shutting down.");
 
     public WebSocketListenerForObs(WebSocketClientForObs client, Gson gson, String password, DisplaysExceptions displaysExceptions) {
         this.client = client;
@@ -172,7 +177,8 @@ public class WebSocketListenerForObs extends WebSocketListener {
                 if (responseData.requestStatus.result) {
                     log.debug("OBS accepted the full-buffer save request; file completion is not confirmed.");
                 } else {
-                    exceptionsDisplay.setObsException(new ObsException("OBS refused full-buffer save: " + responseData.requestStatus.comment));
+                    log.warn("OBS refused the full-buffer save: {}", responseData.requestStatus.comment);
+                    exceptionsDisplay.showChatMessage("OBS couldn't save the replay buffer: " + responseData.requestStatus.comment);
                 }
             }
             if (Objects.equals(responseData.requestType, "GetReplayBufferStatus")) {
@@ -191,35 +197,30 @@ public class WebSocketListenerForObs extends WebSocketListener {
 
     private void handleClipResponse(RequestResponse response) {
         if (response.requestStatus == null || !response.requestStatus.result) {
+            // obs-websocket itself refused, most often because the Replay Buffer Pro vendor is not registered.
             String reason = response.requestStatus == null ? "invalid response" : response.requestStatus.comment;
-            showClipError("OBS duration request failed (Replay Buffer Pro SaveClip required): " + reason);
+            clipFailed(reason, "Make sure the Replay Buffer Pro OBS plugin is installed and up to date.");
             return;
         }
         JsonElement vendorData = response.responseData == null ? null : response.responseData.get("responseData");
         JsonObject data = vendorData != null && vendorData.isJsonObject() ? vendorData.getAsJsonObject() : null;
-        if (data != null && data.has("accepted") && data.get("accepted").isJsonPrimitive()
-            && data.getAsJsonPrimitive("accepted").isBoolean() && data.get("accepted").getAsBoolean()) {
-            if (data.has("clamped") && data.get("clamped").getAsBoolean()) {
-                int saved = data.get("durationSeconds").getAsInt();
-                log.warn("Clip shortened to the {}s OBS replay buffer", saved);
-                exceptionsDisplay.showChatMessage("Your replay clip was shortened to " + ActivityCapture.duration(saved)
-                    + ", the length of your OBS replay buffer. Increase it in OBS to capture whole activities.");
-            }
-            if (clipError != null) {
-                exceptionsDisplay.clearObsException(clipError);
-                clipError = null;
-            }
-            log.info("OBS accepted the clip request; file saving is not yet confirmed.");
-        } else {
-            String reason = data != null && data.has("error") && data.get("error").isJsonPrimitive()
-                ? data.get("error").getAsString() : "missing or invalid acceptance response";
-            showClipError("OBS refused clip request: " + reason);
+        if (data == null || !data.has("accepted") || !data.get("accepted").getAsBoolean()) {
+            String reason = data != null && data.has("error") ? data.get("error").getAsString() : "missing or invalid response";
+            clipFailed(reason, CLIP_ERROR_HELP.getOrDefault(reason, "Check that OBS and Replay Buffer Pro are running."));
+            return;
         }
+        if (data.has("clamped") && data.get("clamped").getAsBoolean()) {
+            int saved = data.get("durationSeconds").getAsInt();
+            log.warn("Clip shortened to the {}s OBS replay buffer", saved);
+            exceptionsDisplay.showChatMessage("Your replay clip was shortened to " + ActivityCapture.duration(saved)
+                + ", the length of your OBS replay buffer. Increase it in OBS to capture whole activities.");
+        }
+        log.info("OBS accepted the clip request; file saving is not yet confirmed.");
     }
 
-    private void showClipError(String message) {
-        clipError = new ObsException(message);
-        exceptionsDisplay.setObsException(clipError);
+    private void clipFailed(String reason, String help) {
+        log.warn("OBS refused the clip request: {}", reason);
+        exceptionsDisplay.showChatMessage("OBS couldn't save your replay clip. " + help);
     }
 
     @Override

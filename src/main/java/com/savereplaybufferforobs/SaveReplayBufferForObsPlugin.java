@@ -568,7 +568,9 @@ public class SaveReplayBufferForObsPlugin extends Plugin implements DisplaysExce
         {
             return true;
         }
-        setObsException(new ObsException(activity.label + " capture skipped (" + trigger + "): no session was started, so the normal Rewards save is used if enabled. Enable activity capture before entering."));
+        log.debug("{} capture skipped ({}): no session was started", activity.label, trigger);
+        showChatMessage(activity.label + " wasn't recorded as a full clip because its toggle was turned on partway through."
+            + " Turn it on before entering to capture the whole run.");
         return false;
     }
 

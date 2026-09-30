@@ -63,19 +63,17 @@ public class WebSocketClientForObs {
     }
 
     public void saveClip(int durationSeconds) {
-        if (durationSeconds <= 0) {
-            exceptionsDisplay.setObsException(new ObsException("Clip duration must be a positive number of seconds."));
-            return;
-        }
         if (!isConnected || webSocket == null) {
-            exceptionsDisplay.setObsException(new ObsException("Clip not requested: OBS WebSocket is not connected and authenticated."));
+            log.warn("Clip not requested: OBS WebSocket is not connected and authenticated");
+            exceptionsDisplay.showChatMessage("Your replay clip wasn't saved because OBS isn't connected.");
             return;
         }
         ObsRequest request = new ObsRequest("CallVendorRequest", "runelite-duration-req", Map.of(
                 "vendorName", "replay-buffer-pro", "requestType", "SaveClip",
                 "requestData", Map.of("durationSeconds", durationSeconds)));
         if (!webSocket.send(gson.toJson(request))) {
-            exceptionsDisplay.setObsException(new ObsException("Clip request could not be sent to OBS."));
+            log.warn("Clip request could not be sent to OBS");
+            exceptionsDisplay.showChatMessage("Your replay clip wasn't saved because the request couldn't be sent to OBS.");
         } else {
             log.debug("Requested the last {} seconds from Replay Buffer Pro.", durationSeconds);
         }
