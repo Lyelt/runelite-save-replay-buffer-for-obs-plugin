@@ -28,12 +28,42 @@ import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
 import net.runelite.client.config.ConfigSection;
+import net.runelite.client.config.Range;
 
 import static com.savereplaybufferforobs.Constants.PLUGIN_IDENTIFIER;
 
 @ConfigGroup(PLUGIN_IDENTIFIER)
 public interface SaveReplayBufferForObsConfig extends Config
 {
+    @ConfigSection(name = "Replay Buffer Pro", description = "Capture activity durations using Replay Buffer Pro's SaveClip command", position = 4)
+    String proSection = "replayBufferPro";
+
+    @ConfigItem(keyName = "captureCox", name = "CoX", description = "Capture full CoX footage on rewards or exit, including Challenge Mode. Enable before entering.", section = proSection, position = 0)
+    default boolean captureCox() { return false; }
+
+    @ConfigItem(keyName = "captureTob", name = "ToB", description = "Capture full ToB footage on rewards, team wipe, or exit. Enable before entering.", section = proSection, position = 1)
+    default boolean captureTob() { return false; }
+
+    @ConfigItem(keyName = "captureToa", name = "ToA", description = "Capture full ToA footage on rewards or exit, including final failure. Enable before entering.", section = proSection, position = 2)
+    default boolean captureToa() { return false; }
+
+    @ConfigItem(keyName = "captureInferno", name = "Inferno", description = "Capture full Inferno footage on completion, death, or exit, including breaks. Enable before entering.", section = proSection, position = 3)
+    default boolean captureInferno() { return false; }
+
+    @ConfigItem(keyName = "captureColosseum", name = "Colosseum", description = "Capture full Colosseum footage on rewards, death, or exit, including intermissions. Enable before entering.", section = proSection, position = 4)
+    default boolean captureColosseum() { return false; }
+
+    @ConfigItem(keyName = "captureDoom", name = "Doom", description = "Capture the whole Doom session on reward claim, death, or exit, including all delves. Enable before entering.", section = proSection, position = 5)
+    default boolean captureDoom() { return false; }
+
+    @Range(min = 0, max = 10)
+    @ConfigItem(keyName = "activityPrePercent", name = "Activity pre-padding (%)", description = "Extra lookback before the activity start, as a percentage of duration. Default 1%.", section = proSection, position = 6)
+    default int activityPrePercent() { return 1; }
+
+    @Range(min = 0, max = 10)
+    @ConfigItem(keyName = "activityPostPercent", name = "Activity post-padding (%)", description = "Wait this percentage of activity duration after the capture trigger, plus Rewards delay. Default 1%.", section = proSection, position = 7)
+    default int activityPostPercent() { return 1; }
+
     @ConfigItem(
             keyName = "checkReplayBufferActive",
             name = "Check if Replay Buffer is active",

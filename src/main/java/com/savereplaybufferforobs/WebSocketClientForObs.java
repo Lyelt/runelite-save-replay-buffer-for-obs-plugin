@@ -2,10 +2,13 @@ package com.savereplaybufferforobs;
 
 import com.google.gson.Gson;
 import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.WebSocket;
+import java.util.Map;
 
+@Slf4j
 public class WebSocketClientForObs {
     private final String websocketUrl;
     private final String password;
@@ -18,7 +21,7 @@ public class WebSocketClientForObs {
     private DisplaysExceptions exceptionsDisplay;
 
     @Setter
-    private boolean isConnected;
+    private volatile boolean isConnected;
 
     private class ObsRequest {
         private final int op = 6;
@@ -59,6 +62,25 @@ public class WebSocketClientForObs {
         makeOBSRequest("SaveReplayBuffer", "runelite-clip-req", new Object());
     }
 
+    public void saveClip(int durationSeconds) {
+        if (durationSeconds <= 0) {
+            exceptionsDisplay.setObsException(new ObsException("Clip duration must be a positive number of seconds."));
+            return;
+        }
+        if (!isConnected || webSocket == null) {
+            exceptionsDisplay.setObsException(new ObsException("Clip not requested: OBS WebSocket is not connected and authenticated."));
+            return;
+        }
+        ObsRequest request = new ObsRequest("CallVendorRequest", "runelite-duration-req", Map.of(
+                "vendorName", "replay-buffer-pro", "requestType", "SaveClip",
+                "requestData", Map.of("durationSeconds", durationSeconds)));
+        if (!webSocket.send(gson.toJson(request))) {
+            exceptionsDisplay.setObsException(new ObsException("Clip request could not be sent to OBS."));
+        } else {
+            log.debug("Requested the last {} seconds from Replay Buffer Pro.", durationSeconds);
+        }
+    }
+
     public void connect() {
         Request request = new Request.Builder()
                 .url(websocketUrl)
@@ -67,7 +89,10 @@ public class WebSocketClientForObs {
     }
 
     public void disconnect() {
-        this.webSocket.close(1000, "Normal Shutdown");
+        isConnected = false;
+        if (webSocket != null) {
+            this.webSocket.close(1000, "Normal Shutdown");
+        }
     }
 
     public void pingHealth() {

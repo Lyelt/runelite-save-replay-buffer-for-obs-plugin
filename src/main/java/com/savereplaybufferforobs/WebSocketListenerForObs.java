@@ -2,6 +2,7 @@ package com.savereplaybufferforobs;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.Response;
 import okhttp3.WebSocket;
@@ -26,6 +27,8 @@ public class WebSocketListenerForObs extends WebSocketListener {
     private final DisplaysExceptions exceptionsDisplay;
 
     private final WebSocketClientForObs client;
+    private static final ObsException REPLAY_BUFFER_INACTIVE = new ObsException("OBS Replay Buffer is not active!");
+    private ObsException clipError;
 
     public WebSocketListenerForObs(WebSocketClientForObs client, Gson gson, String password, DisplaysExceptions displaysExceptions) {
         this.client = client;
@@ -76,7 +79,13 @@ public class WebSocketListenerForObs extends WebSocketListener {
     private static class RequestResponse {
         public String requestId;
         public String requestType;
-        private Object responseData;
+        private JsonObject responseData;
+        private Status requestStatus;
+    }
+
+    private static class Status {
+        boolean result;
+        String comment;
     }
 
     private static class HealthResponse {
@@ -155,18 +164,56 @@ public class WebSocketListenerForObs extends WebSocketListener {
             client.setConnected(true);
         } else if (response.op == 7) { // Opcode 7: RequestResponse
             RequestResponse responseData = gson.fromJson(response.d, RequestResponse.class);
+            if (Objects.equals(responseData.requestId, "runelite-duration-req")) {
+                handleClipResponse(responseData);
+                return;
+            }
+            if (Objects.equals(responseData.requestType, "SaveReplayBuffer") && responseData.requestStatus != null) {
+                if (responseData.requestStatus.result) {
+                    log.debug("OBS accepted the full-buffer save request; file completion is not confirmed.");
+                } else {
+                    exceptionsDisplay.setObsException(new ObsException("OBS refused full-buffer save: " + responseData.requestStatus.comment));
+                }
+            }
             if (Objects.equals(responseData.requestType, "GetReplayBufferStatus")) {
                 // healthcheck response
                 HealthResponse healthResponse = gson.fromJson(responseData.responseData.toString(), HealthResponse.class);
                 if (healthResponse.outputActive) {
-                    exceptionsDisplay.clearObsException();
+                    exceptionsDisplay.clearObsException(REPLAY_BUFFER_INACTIVE);
                 }
                 else
                 {
-                    exceptionsDisplay.setObsException(new ObsException("OBS Replay Buffer is not active!"));
+                    exceptionsDisplay.setObsException(REPLAY_BUFFER_INACTIVE);
                 }
             }
         }
+    }
+
+    private void handleClipResponse(RequestResponse response) {
+        if (response.requestStatus == null || !response.requestStatus.result) {
+            String reason = response.requestStatus == null ? "invalid response" : response.requestStatus.comment;
+            showClipError("OBS duration request failed (Replay Buffer Pro SaveClip required): " + reason);
+            return;
+        }
+        JsonElement vendorData = response.responseData == null ? null : response.responseData.get("responseData");
+        JsonObject data = vendorData != null && vendorData.isJsonObject() ? vendorData.getAsJsonObject() : null;
+        if (data != null && data.has("accepted") && data.get("accepted").isJsonPrimitive()
+            && data.getAsJsonPrimitive("accepted").isBoolean() && data.get("accepted").getAsBoolean()) {
+            if (clipError != null) {
+                exceptionsDisplay.clearObsException(clipError);
+                clipError = null;
+            }
+            log.info("OBS accepted the clip request; file saving is not yet confirmed.");
+        } else {
+            String reason = data != null && data.has("error") && data.get("error").isJsonPrimitive()
+                ? data.get("error").getAsString() : "missing or invalid acceptance response";
+            showClipError("OBS refused clip request: " + reason);
+        }
+    }
+
+    private void showClipError(String message) {
+        clipError = new ObsException(message);
+        exceptionsDisplay.setObsException(clipError);
     }
 
     @Override
@@ -183,6 +230,7 @@ public class WebSocketListenerForObs extends WebSocketListener {
 
     @Override
     public void onFailure(WebSocket webSocket, Throwable t, Response response) {
+        client.setConnected(false);
         log.info("WebSocket failed: {}", t.getMessage());
         exceptionsDisplay.setObsException(new ObsException(
                 "Unable to connect to the OBS WebSocket Server. Is OBS running and configured?"
