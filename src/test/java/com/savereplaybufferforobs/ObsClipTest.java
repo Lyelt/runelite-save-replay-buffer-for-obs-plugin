@@ -88,12 +88,11 @@ public class ObsClipTest
     }
 
     @Test
-    public void clampedClipWarnsUntilAFullLengthClipSaves()
+    public void clampedClipCountsAsSavedWithoutAnOverlay()
     {
+        respond("{\"result\":false,\"comment\":\"Unknown vendor\"}", "{}");
         respond("{\"result\":true}", "{\"responseData\":{\"accepted\":true,\"durationSeconds\":3600,\"clamped\":true}}");
-        assertTrue(error.contains("3600s OBS replay buffer"));
-        respond("{\"result\":true}", "{\"responseData\":{\"accepted\":true,\"durationSeconds\":120,\"clamped\":false}}");
-        assertNull(error);
+        assertNull(error); // Only logged; it also clears the earlier clip error.
     }
 
     private void health(boolean active)

@@ -200,10 +200,10 @@ public class WebSocketListenerForObs extends WebSocketListener {
         if (data != null && data.has("accepted") && data.get("accepted").isJsonPrimitive()
             && data.getAsJsonPrimitive("accepted").isBoolean() && data.get("accepted").getAsBoolean()) {
             if (data.has("clamped") && data.get("clamped").getAsBoolean()) {
-                // Replay Buffer Pro saved the whole buffer; warn so the buffer can be lengthened.
-                showClipError("Clip shortened to the " + data.get("durationSeconds").getAsInt()
-                    + "s OBS replay buffer. Increase the buffer length to capture whole activities.");
-            } else if (clipError != null) {
+                log.warn("Clip shortened to the {}s OBS replay buffer. Increase the buffer length to capture whole activities.",
+                    data.get("durationSeconds").getAsInt());
+            }
+            if (clipError != null) {
                 exceptionsDisplay.clearObsException(clipError);
                 clipError = null;
             }
