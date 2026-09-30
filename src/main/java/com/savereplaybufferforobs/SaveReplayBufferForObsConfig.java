@@ -64,6 +64,9 @@ public interface SaveReplayBufferForObsConfig extends Config
     @ConfigItem(keyName = "activityPostPercent", name = "Activity post-padding (%)", description = "Wait this percentage of activity duration after the capture trigger, plus Rewards delay. Default 5%.", section = proSection, position = 7)
     default int activityPostPercent() { return 5; }
 
+    @ConfigItem(keyName = "chatMessages", name = "Chat messages", description = "Show chat messages when a recording starts or saves, and when a clip couldn't be saved.", section = proSection, position = 8)
+    default boolean chatMessages() { return true; }
+
     @ConfigItem(
             keyName = "checkReplayBufferActive",
             name = "Check if Replay Buffer is active",

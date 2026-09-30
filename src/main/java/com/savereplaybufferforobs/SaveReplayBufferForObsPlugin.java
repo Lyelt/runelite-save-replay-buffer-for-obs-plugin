@@ -140,6 +140,10 @@ public class SaveReplayBufferForObsPlugin extends Plugin implements DisplaysExce
     public void showChatMessage(String message)
     {
         log.debug("{}", message);
+        if (!config.chatMessages())
+        {
+            return;
+        }
         chatMessageManager.queue(QueuedMessage.builder()
             .type(ChatMessageType.CONSOLE)
             .runeLiteFormattedMessage(new ChatMessageBuilder().append(ChatColorType.HIGHLIGHT).append(message).build())
