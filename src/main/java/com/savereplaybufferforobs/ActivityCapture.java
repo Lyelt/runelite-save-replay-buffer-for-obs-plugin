@@ -48,6 +48,7 @@ final class ActivityCapture
     private final LongSupplier clock;
     private final IntConsumer save;
     private final Consumer<String> debug;
+    private final Consumer<String> chat;
     private final Set<Session> scheduledCaptures = new HashSet<>();
     private Session pending;
     private Activity location;
@@ -68,12 +69,14 @@ final class ActivityCapture
         }
     }
 
-    ActivityCapture(ScheduledExecutorService scheduler, LongSupplier clock, IntConsumer save, Consumer<String> debug)
+    /** {@code debug} receives detailed diagnostics; {@code chat} receives the few messages players see. */
+    ActivityCapture(ScheduledExecutorService scheduler, LongSupplier clock, IntConsumer save, Consumer<String> debug, Consumer<String> chat)
     {
         this.scheduler = scheduler;
         this.clock = clock;
         this.save = save;
         this.debug = debug;
+        this.chat = chat;
     }
 
     synchronized void completed(String message, SaveReplayBufferForObsConfig config)
@@ -151,6 +154,10 @@ final class ActivityCapture
         else if (entered && !pending.entered)
         {
             debug.accept(activity.label + " capture continues: " + reason + ".");
+        }
+        if (entered && !pending.entered)
+        {
+            chat.accept("Recording " + activity.label + " for a replay clip.");
         }
         pending.entered |= entered;
     }
@@ -258,6 +265,8 @@ final class ActivityCapture
         debug.accept(String.format("%s capture ended: %s. Activity lasted %.0fs; saving it plus %.1fs pre-padding after"
             + " %.1fs post-padding and %ds Rewards delay (%.1fs).",
             activity.label, reason, activitySeconds, pre, post, Math.max(0, delaySeconds), delayMillis / 1000.0));
+        chat.accept("Saving your " + activity.label + " replay clip (" + duration(activitySeconds) + ") in "
+            + (long) Math.ceil(delayMillis / 1000.0) + " seconds.");
         long due = clock.getAsLong() + TimeUnit.MILLISECONDS.toNanos(delayMillis);
         scheduledCaptures.add(session);
         session.future = scheduler.schedule(() -> {
@@ -270,6 +279,15 @@ final class ActivityCapture
             }
         }, delayMillis, TimeUnit.MILLISECONDS);
         return true;
+    }
+
+    /** Formats seconds as m:ss, or h:mm:ss from an hour. */
+    static String duration(double seconds)
+    {
+        long total = Math.round(seconds);
+        return total >= 3600
+            ? String.format("%d:%02d:%02d", total / 3600, total / 60 % 60, total % 60)
+            : String.format("%d:%02d", total / 60, total % 60);
     }
 
     private static double percent(int value)

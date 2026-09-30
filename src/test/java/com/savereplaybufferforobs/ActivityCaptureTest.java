@@ -3,6 +3,7 @@ package com.savereplaybufferforobs;
 import java.lang.reflect.Field;
 import java.lang.reflect.Proxy;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
@@ -39,6 +40,7 @@ public class ActivityCaptureTest
     private final List<Long> dueTimes = new ArrayList<>();
     private final List<Integer> requests = new ArrayList<>();
     private final List<String> messages = new ArrayList<>();
+    private final List<String> chat = new ArrayList<>();
     private final ScheduledThreadPoolExecutor scheduler = new ScheduledThreadPoolExecutor(1)
     {
         @Override
@@ -51,7 +53,7 @@ public class ActivityCaptureTest
             return super.schedule(command, 1, TimeUnit.DAYS);
         }
     };
-    private final ActivityCapture capture = new ActivityCapture(scheduler, () -> now, requests::add, messages::add);
+    private final ActivityCapture capture = new ActivityCapture(scheduler, () -> now, requests::add, messages::add, chat::add);
 
     @After
     public void close()
@@ -450,6 +452,19 @@ public class ActivityCaptureTest
     public void postPaddingDefaultsToFivePercent()
     {
         assertEquals(5, new SaveReplayBufferForObsConfig() { }.activityPostPercent());
+    }
+
+    @Test
+    public void chatOnlyAnnouncesRecordingsYouEnteredAndTheirSave()
+    {
+        capture.completed("Alice has entered the Theatre of Blood (Normal Mode). Step inside to join her...", config);
+        assertTrue(chat.isEmpty()); // Not announced until you are inside.
+        capture.locationChanged(region(12869), false, config);
+        capture.playerDied(config);
+        now = TimeUnit.SECONDS.toNanos(612);
+        capture.locationChanged(new WorldPoint(3200, 3200, 0), false, config);
+        assertEquals(Arrays.asList("Recording Theatre of Blood for a replay clip.",
+            "Saving your Theatre of Blood replay clip (10:12) in 7 seconds."), chat);
     }
 
     @Test

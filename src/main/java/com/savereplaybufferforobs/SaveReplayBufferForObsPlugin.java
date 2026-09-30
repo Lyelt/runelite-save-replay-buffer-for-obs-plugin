@@ -40,6 +40,10 @@ import net.runelite.api.events.*;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.gameval.AnimationID;
 import net.runelite.api.gameval.VarbitID;
+import net.runelite.client.chat.ChatColorType;
+import net.runelite.client.chat.ChatMessageBuilder;
+import net.runelite.client.chat.ChatMessageManager;
+import net.runelite.client.chat.QueuedMessage;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ConfigChanged;
@@ -89,6 +93,9 @@ public class SaveReplayBufferForObsPlugin extends Plugin implements DisplaysExce
     @Inject
     private OverlayManager overlayManager;
 
+    @Inject
+    private ChatMessageManager chatMessageManager;
+
     private ObsExceptionOverlay obsExceptionOverlay = null;
 
     private ScheduledFuture<?> healthcheck;
@@ -127,6 +134,16 @@ public class SaveReplayBufferForObsPlugin extends Plugin implements DisplaysExce
         if (obsExceptionOverlay != null && obsExceptionOverlay.isSameException(exception)) {
             clearObsException();
         }
+    }
+
+    @Override
+    public void showChatMessage(String message)
+    {
+        log.debug("{}", message);
+        chatMessageManager.queue(QueuedMessage.builder()
+            .type(ChatMessageType.CONSOLE)
+            .runeLiteFormattedMessage(new ChatMessageBuilder().append(ChatColorType.HIGHLIGHT).append(message).build())
+            .build());
     }
 
     protected enum EventType
@@ -259,7 +276,7 @@ public class SaveReplayBufferForObsPlugin extends Plugin implements DisplaysExce
     {
         log.debug("Startup OBS Connection");
         reconnect();
-        activityCapture = new ActivityCapture(scheduledExecutorService, System::nanoTime, seconds -> obsClient.saveClip(seconds), message -> log.debug("{}", message));
+        activityCapture = new ActivityCapture(scheduledExecutorService, System::nanoTime, seconds -> obsClient.saveClip(seconds), message -> log.debug("{}", message), this::showChatMessage);
     }
 
     @Override

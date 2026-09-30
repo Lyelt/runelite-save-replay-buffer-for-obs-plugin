@@ -15,11 +15,13 @@ public class ObsClipTest
     private final Gson gson = new Gson();
     private String error;
     private String sent;
+    private String chat;
     private final DisplaysExceptions feedback = new DisplaysExceptions()
     {
         public void setObsException(ObsException exception) { error = exception.getMessage(); }
         public void clearObsException() { error = null; }
         public void clearObsException(ObsException exception) { if (exception.getMessage().equals(error)) { error = null; } }
+        public void showChatMessage(String message) { chat = message; }
     };
     private final WebSocketClientForObs client = new WebSocketClientForObs(new OkHttpClient(), gson, "localhost", 4455, "", feedback);
     private final WebSocketListenerForObs listener = new WebSocketListenerForObs(client, gson, "", feedback);
@@ -88,11 +90,13 @@ public class ObsClipTest
     }
 
     @Test
-    public void clampedClipCountsAsSavedWithoutAnOverlay()
+    public void clampedClipWarnsOnceInChatWithoutAnOverlay()
     {
         respond("{\"result\":false,\"comment\":\"Unknown vendor\"}", "{}");
         respond("{\"result\":true}", "{\"responseData\":{\"accepted\":true,\"durationSeconds\":3600,\"clamped\":true}}");
-        assertNull(error); // Only logged; it also clears the earlier clip error.
+        assertNull(error); // It still counts as saved, clearing the earlier clip error.
+        assertEquals("Your replay clip was shortened to 1:00:00, the length of your OBS replay buffer."
+            + " Increase it in OBS to capture whole activities.", chat);
     }
 
     private void health(boolean active)

@@ -7,4 +7,7 @@ public interface DisplaysExceptions {
 
     /** Clears the displayed exception only if it is this one. */
     void clearObsException(ObsException exception);
+
+    /** Shows a one-off message in the game chat. */
+    void showChatMessage(String message);
 }
