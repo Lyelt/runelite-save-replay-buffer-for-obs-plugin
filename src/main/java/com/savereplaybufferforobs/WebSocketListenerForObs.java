@@ -28,7 +28,6 @@ public class WebSocketListenerForObs extends WebSocketListener {
     private final DisplaysExceptions exceptionsDisplay;
 
     private final WebSocketClientForObs client;
-    private static final ObsException REPLAY_BUFFER_INACTIVE = new ObsException("OBS Replay Buffer is not active!");
     // Replay Buffer Pro SaveClip error codes the player can act on.
     private static final Map<String, String> CLIP_ERROR_HELP = Map.of(
         "buffer-inactive", "The OBS replay buffer wasn't running; start it in OBS.",
@@ -91,6 +90,14 @@ public class WebSocketListenerForObs extends WebSocketListener {
     private static class Status {
         boolean result;
         String comment;
+    }
+
+    // Replay Buffer Pro's SaveClip reply.
+    private static class ClipResult {
+        boolean accepted;
+        String error;
+        int durationSeconds;
+        boolean clamped;
     }
 
     private static class HealthResponse {
@@ -173,23 +180,15 @@ public class WebSocketListenerForObs extends WebSocketListener {
                 handleClipResponse(responseData);
                 return;
             }
-            if (Objects.equals(responseData.requestType, "SaveReplayBuffer") && responseData.requestStatus != null) {
-                if (responseData.requestStatus.result) {
-                    log.debug("OBS accepted the full-buffer save request; file completion is not confirmed.");
-                } else {
-                    log.warn("OBS refused the full-buffer save: {}", responseData.requestStatus.comment);
-                    exceptionsDisplay.showChatMessage("OBS couldn't save the replay buffer: " + responseData.requestStatus.comment);
-                }
-            }
             if (Objects.equals(responseData.requestType, "GetReplayBufferStatus")) {
                 // healthcheck response
                 HealthResponse healthResponse = gson.fromJson(responseData.responseData.toString(), HealthResponse.class);
                 if (healthResponse.outputActive) {
-                    exceptionsDisplay.clearObsException(REPLAY_BUFFER_INACTIVE);
+                    exceptionsDisplay.clearObsException();
                 }
                 else
                 {
-                    exceptionsDisplay.setObsException(REPLAY_BUFFER_INACTIVE);
+                    exceptionsDisplay.setObsException(new ObsException("OBS Replay Buffer is not active!"));
                 }
             }
         }
@@ -198,24 +197,21 @@ public class WebSocketListenerForObs extends WebSocketListener {
     private void handleClipResponse(RequestResponse response) {
         if (response.requestStatus == null || !response.requestStatus.result) {
             // obs-websocket itself refused, most often because the Replay Buffer Pro vendor is not registered.
-            String reason = response.requestStatus == null ? "invalid response" : response.requestStatus.comment;
-            clipFailed(reason, "Make sure the Replay Buffer Pro OBS plugin is installed and up to date.");
+            clipFailed(response.requestStatus == null ? null : response.requestStatus.comment,
+                "Make sure the Replay Buffer Pro OBS plugin is installed and up to date.");
             return;
         }
-        JsonElement vendorData = response.responseData == null ? null : response.responseData.get("responseData");
-        JsonObject data = vendorData != null && vendorData.isJsonObject() ? vendorData.getAsJsonObject() : null;
-        if (data == null || !data.has("accepted") || !data.get("accepted").getAsBoolean()) {
-            String reason = data != null && data.has("error") ? data.get("error").getAsString() : "missing or invalid response";
-            clipFailed(reason, CLIP_ERROR_HELP.getOrDefault(reason, "Check that OBS and Replay Buffer Pro are running."));
+        ClipResult result = gson.fromJson(response.responseData.get("responseData"), ClipResult.class);
+        if (result == null || !result.accepted) {
+            String error = result == null || result.error == null ? "" : result.error;
+            clipFailed(error, CLIP_ERROR_HELP.getOrDefault(error, "Check that OBS and Replay Buffer Pro are running."));
             return;
         }
-        if (data.has("clamped") && data.get("clamped").getAsBoolean()) {
-            int saved = data.get("durationSeconds").getAsInt();
-            log.warn("Clip shortened to the {}s OBS replay buffer", saved);
-            exceptionsDisplay.showChatMessage("Your replay clip was shortened to " + ActivityCapture.duration(saved)
+        if (result.clamped) {
+            log.warn("Clip shortened to the {}s OBS replay buffer", result.durationSeconds);
+            exceptionsDisplay.showChatMessage("Your replay clip was shortened to " + ActivityCapture.duration(result.durationSeconds)
                 + ", the length of your OBS replay buffer. Increase it in OBS to capture whole activities.");
         }
-        log.info("OBS accepted the clip request; file saving is not yet confirmed.");
     }
 
     private void clipFailed(String reason, String help) {
