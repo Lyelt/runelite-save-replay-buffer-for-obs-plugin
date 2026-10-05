@@ -35,7 +35,7 @@ They are off by default.
   death, logging out, or hopping. Room changes and Doom delves stay in the same recording. A lost connection that
   reconnects into the same run keeps recording; logging back in inside the activity starts a new recording.
 - **Activity pre-padding** (default 1% of the activity length) adds footage before the start. **Activity post-padding**
-  (default 5%) keeps recording after you leave, plus the **Rewards** delay, before the clip is saved.
+  (default 1%) keeps recording after you leave, plus the **Rewards** delay, before the clip is saved.
 - Inside an enabled activity, the regular saves (boss kills, deaths, rewards, screenshots and so on) are skipped,
   because the activity clip covers them.
 - If the OBS replay buffer is shorter than the clip, Replay Buffer Pro saves the whole buffer and the plugin warns you in chat.

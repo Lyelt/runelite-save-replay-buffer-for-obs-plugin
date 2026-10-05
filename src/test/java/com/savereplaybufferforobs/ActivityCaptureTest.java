@@ -23,7 +23,6 @@ public class ActivityCaptureTest
         public boolean captureInferno() { return true; }
         public boolean captureColosseum() { return true; }
         public boolean captureDoom() { return true; }
-        public int activityPostPercent() { return 1; } // Expected clip lengths below assume 1%.
     };
     private final SaveReplayBufferForObsConfig disabled = new SaveReplayBufferForObsConfig() { };
     private static final WorldPoint OUTSIDE = new WorldPoint(3200, 3200, 0);
@@ -97,7 +96,6 @@ public class ActivityCaptureTest
         SaveReplayBufferForObsConfig rewardsDelay = new SaveReplayBufferForObsConfig()
         {
             public boolean captureToa() { return true; }
-            public int activityPostPercent() { return 1; }
             public int rewardsDelay() { return 5; }
         };
         capture.locationChanged(region(15698), false, rewardsDelay);
