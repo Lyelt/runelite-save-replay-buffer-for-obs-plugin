@@ -33,6 +33,11 @@ public class ActivityCaptureTest
         public boolean captureDoom() { return true; }
         public int activityPostPercent() { return 1; } // Expected clip lengths below assume 1%.
     };
+    private static final SaveReplayBufferForObsConfig NO_PADDING = new SaveReplayBufferForObsConfig()
+    {
+        public int activityPrePercent() { return 0; }
+        public int activityPostPercent() { return 0; }
+    };
     private long now;
     private final List<Runnable> callbacks = new ArrayList<>();
     private final List<Long> delays = new ArrayList<>();
@@ -50,7 +55,7 @@ public class ActivityCaptureTest
             return super.schedule(command, 1, TimeUnit.DAYS);
         }
     };
-    private final ActivityCapture capture = new ActivityCapture(scheduler, () -> now, requests::add, message -> { }, message -> { });
+    private final ActivityCapture capture = new ActivityCapture(scheduler, () -> now, requests::add, message -> { });
 
     @After
     public void close()
@@ -214,7 +219,12 @@ public class ActivityCaptureTest
     {
         capture.locationChanged(region(15698), false, config);
         now = TimeUnit.SECONDS.toNanos(100);
-        assertTrue(capture.end(ActivityCapture.Activity.TOA, "rewards interface opened", 1, 1, 5));
+        SaveReplayBufferForObsConfig rewardsDelay = new SaveReplayBufferForObsConfig()
+        {
+            public int activityPostPercent() { return 1; }
+            public int rewardsDelay() { return 5; }
+        };
+        assertTrue(capture.end(ActivityCapture.Activity.TOA, "rewards interface opened", rewardsDelay));
         assertEquals(Long.valueOf(6000), delays.get(0));
         assertTrue(requests.isEmpty());
         now = TimeUnit.MILLISECONDS.toNanos(106_500); // 500 ms scheduler lag.
@@ -242,46 +252,13 @@ public class ActivityCaptureTest
     }
 
     @Test
-    public void theatreEntryChatDoesNotDiscardPriorActivitySave()
-    {
-        capture.locationChanged(region(15698), false, config);
-        now = TimeUnit.SECONDS.toNanos(100);
-        capture.chatMessage("You enter the Theatre of Blood (Hard Mode)...", config);
-        assertEquals(1, callbacks.size());
-        capture.locationChanged(region(12869), false, config);
-        assertEquals(1, callbacks.size());
-
-        now = TimeUnit.SECONDS.toNanos(101);
-        run(0);
-        assertEquals(Integer.valueOf(102), requests.get(0));
-        now = TimeUnit.SECONDS.toNanos(150);
-        capture.locationChanged(new WorldPoint(3200, 3200, 0), false, config);
-        assertEquals(2, callbacks.size());
-        run(1);
-        assertEquals(Integer.valueOf(51), requests.get(1));
-    }
-
-    @Test
-    public void duplicateDeathExitAndRewardsDoNotScheduleAgain()
-    {
-        start(ActivityCapture.Activity.DOOM);
-        now = TimeUnit.SECONDS.toNanos(20);
-        capture.playerDied(config);
-        capture.playerDied(config);
-        capture.locationChanged(new WorldPoint(3200, 3200, 0), false, config);
-        assertTrue(capture.end(ActivityCapture.Activity.DOOM, "rewards interface opened", 1, 1, 0));
-        assertEquals(1, callbacks.size());
-    }
-
-    @Test
     public void disabledActivitiesNeverStartSessions()
     {
         SaveReplayBufferForObsConfig disabled = new SaveReplayBufferForObsConfig() { };
         capture.locationChanged(region(15698), false, disabled);
         capture.locationChanged(region(13454), false, disabled);
-        capture.theatreStateChanged(2, disabled);
-        assertFalse(capture.end(ActivityCapture.Activity.TOA, "rewards interface opened", 0, 0, 0));
-        assertFalse(capture.end(ActivityCapture.Activity.TOB, "rewards interface opened", 0, 0, 0));
+        assertFalse(capture.end(ActivityCapture.Activity.TOA, "rewards interface opened", NO_PADDING));
+        assertFalse(capture.end(ActivityCapture.Activity.TOB, "rewards interface opened", NO_PADDING));
         assertTrue(callbacks.isEmpty());
     }
 
@@ -341,7 +318,7 @@ public class ActivityCaptureTest
     {
         start(ActivityCapture.Activity.TOA);
         now = TimeUnit.SECONDS.toNanos(10);
-        assertTrue(capture.end(ActivityCapture.Activity.TOA, "rewards interface opened", 0, 0, 0));
+        assertTrue(capture.end(ActivityCapture.Activity.TOA, "rewards interface opened", NO_PADDING));
         capture.exited("logged out", config);
         run(0);
         assertEquals(Integer.valueOf(10), requests.get(0));
@@ -351,7 +328,7 @@ public class ActivityCaptureTest
         dueTimes.clear();
         requests.clear();
         start(ActivityCapture.Activity.TOA);
-        capture.end(ActivityCapture.Activity.TOA, "rewards interface opened", 0, 0, 0);
+        capture.end(ActivityCapture.Activity.TOA, "rewards interface opened", NO_PADDING);
         capture.cancel();
         run(0);
         assertTrue(requests.isEmpty());
@@ -368,7 +345,7 @@ public class ActivityCaptureTest
         settings.setAccessible(true);
         settings.set(plugin, config);
         start(ActivityCapture.Activity.TOA);
-        capture.end(ActivityCapture.Activity.TOA, "rewards interface opened", 0, 0, 0);
+        capture.end(ActivityCapture.Activity.TOA, "rewards interface opened", NO_PADDING);
         GameStateChanged logout = new GameStateChanged();
         logout.setGameState(GameState.LOGIN_SCREEN);
         plugin.onGameStateChanged(logout);
@@ -378,7 +355,7 @@ public class ActivityCaptureTest
         assertEquals(1, requests.size());
 
         start(ActivityCapture.Activity.TOA);
-        capture.end(ActivityCapture.Activity.TOA, "rewards interface opened", 0, 0, 0);
+        capture.end(ActivityCapture.Activity.TOA, "rewards interface opened", NO_PADDING);
         plugin.shutDown();
         run(2);
         assertEquals(1, requests.size());
@@ -441,23 +418,6 @@ public class ActivityCaptureTest
             run(1);
             assertEquals(Integer.valueOf(612), requests.get(1));
         }
-    }
-
-    @Test
-    public void theatreEntryByPartyMemberWithoutUsIsDropped()
-    {
-        capture.chatMessage("Alice has entered the Theatre of Blood (Normal Mode). Step inside to join her...", config);
-        assertTrue(capture.capturing(ActivityCapture.Activity.TOB, config));
-        capture.theatreStateChanged(1, config); // Party left without us.
-        start(ActivityCapture.Activity.TOA);
-        now = TimeUnit.SECONDS.toNanos(60);
-        capture.chatMessage("Bob has entered the Theatre of Blood (Normal Mode). Step inside to join him...", config);
-        capture.locationChanged(region(12869), false, config); // Moving on to a joined raid.
-        assertEquals(1, callbacks.size()); // Only the finished ToA session.
-        assertFalse(capture.capturing(ActivityCapture.Activity.TOA, config));
-
-        capture.locationChanged(new WorldPoint(1300, 9560, 0), false, config);
-        assertEquals(2, callbacks.size()); // The entered ToB still saves when leaving for Doom.
     }
 
     @Test

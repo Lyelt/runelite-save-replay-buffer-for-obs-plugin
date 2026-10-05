@@ -33,7 +33,7 @@ can save a clip covering an entire activity instead of the whole buffer. Turn on
 | Activity | Capture starts | Capture ends |
 | --- | --- | --- |
 | CoX (including CM) | Entering the raid | Rewards or leaving |
-| ToB (all modes) | Raid entry | Rewards, a team wipe, or leaving |
+| ToB (all modes) | Entering the raid | Rewards, a team wipe, or leaving |
 | ToA (all modes) | Entering the raid | Rewards or leaving |
 | Inferno | Entering | Completion, death, or leaving |
 | Colosseum | Entering the arena | Reward chest, death, or leaving |

@@ -9,17 +9,15 @@ import java.util.function.Consumer;
 import java.util.function.IntConsumer;
 import java.util.function.LongSupplier;
 import java.util.function.Predicate;
-import java.util.regex.Pattern;
+import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.client.util.Text;
 
 /** Tracks one activity at a time and, when it ends, asks Replay Buffer Pro to save a clip covering it. */
+@Slf4j
 final class ActivityCapture
 {
-    // A save that fires this late (for example, after the computer slept) is dropped rather than saving the wrong footage.
-    private static final long MAX_AGE = TimeUnit.MINUTES.toNanos(10);
-
     enum Activity
     {
         COX("Chambers of Xeric", InterfaceID.RAIDS_REWARDS, SaveReplayBufferForObsConfig::captureCox),
@@ -40,13 +38,10 @@ final class ActivityCapture
             this.enabled = enabled;
         }
     }
-    private static final Pattern TOB_ENTRY = Pattern.compile("^(?:You enter the Theatre of Blood \\(\\w+ Mode\\)\\.\\.\\.|.+ has entered the Theatre of Blood \\(\\w+ Mode\\)\\. Step inside to join (?:her|him|them)\\.\\.\\.)$");
-    private static final Pattern INFERNO_TIME = Pattern.compile("^Duration:\\s*[0-9]+:[0-5][0-9](?::[0-5][0-9])?(?:\\.[0-9]{1,3})?(?=\\s|$|\\.(?![0-9]))");
 
     private final ScheduledExecutorService scheduler;
     private final LongSupplier clock;
     private final IntConsumer save;
-    private final Consumer<String> debug;
     private final Consumer<String> chat;
     private final Set<Session> scheduledCaptures = new HashSet<>();
     private Session pending;
@@ -57,7 +52,6 @@ final class ActivityCapture
         final Activity activity;
         final long started;
         boolean requested;
-        boolean entered;
         boolean teamWiped;
         ScheduledFuture<?> future;
 
@@ -68,24 +62,19 @@ final class ActivityCapture
         }
     }
 
-    /** {@code debug} receives detailed diagnostics; {@code chat} receives the few messages players see. */
-    ActivityCapture(ScheduledExecutorService scheduler, LongSupplier clock, IntConsumer save, Consumer<String> debug, Consumer<String> chat)
+    /** {@code chat} receives the few messages players see; details go to the debug log. */
+    ActivityCapture(ScheduledExecutorService scheduler, LongSupplier clock, IntConsumer save, Consumer<String> chat)
     {
         this.scheduler = scheduler;
         this.clock = clock;
         this.save = save;
-        this.debug = debug;
         this.chat = chat;
     }
 
     synchronized void chatMessage(String message, SaveReplayBufferForObsConfig config)
     {
         String plain = Text.removeTags(message);
-        if (config.captureTob() && TOB_ENTRY.matcher(plain).matches())
-        {
-            start(Activity.TOB, false, "chat message \"" + plain + "\"", config);
-        }
-        if (pending != null && pending.activity == Activity.INFERNO && !pending.requested && INFERNO_TIME.matcher(plain).find())
+        if (pending != null && pending.activity == Activity.INFERNO && plain.startsWith("Duration:"))
         {
             finish(Activity.INFERNO, "completion chat message \"" + plain + "\"", config);
         }
@@ -124,21 +113,21 @@ final class ActivityCapture
         }
         if (location != next)
         {
-            String where = inCox ? "the CoX raid (in-raid varbit set)" : "region " + point.getRegionID();
+            String where = inCox ? "the CoX raid" : "region " + point.getRegionID();
             // Exiting is an ending, regardless of the destination or reason for leaving.
             if (location != null)
             {
-                finish(location, "left the activity area for " + where, config);
+                finish(location, "left for " + where, config);
             }
             if (next != null && next.enabled.test(config))
             {
-                start(next, true, "entered " + where, config);
+                start(next, "entered " + where, config);
             }
         }
         location = next;
     }
 
-    private void start(Activity activity, boolean entered, String reason, SaveReplayBufferForObsConfig config)
+    private void start(Activity activity, String reason, SaveReplayBufferForObsConfig config)
     {
         if (pending != null && pending.activity != activity)
         {
@@ -147,28 +136,8 @@ final class ActivityCapture
         if (pending == null || pending.activity != activity || pending.requested)
         {
             pending = new Session(activity, clock.getAsLong());
-            debug.accept(activity.label + " capture started: " + reason + (entered ? "." : ". It is kept only if you enter."));
-        }
-        else if (entered && !pending.entered)
-        {
-            debug.accept(activity.label + " capture continues: " + reason + ".");
-        }
-        if (entered && !pending.entered)
-        {
+            log.debug("{} capture started: {}", activity.label, reason);
             chat.accept("Recording " + activity.label + " for a replay clip.");
-        }
-        pending.entered |= entered;
-    }
-
-    synchronized void theatreStateChanged(int state, SaveReplayBufferForObsConfig config)
-    {
-        if (state == 2 && location != Activity.TOB && config.captureTob()) // 2: inside the Theatre.
-        {
-            start(Activity.TOB, true, "ToB party status became 2 (inside the Theatre)", config);
-        }
-        else if (state < 2 && location != Activity.TOB)
-        {
-            finish(Activity.TOB, "ToB party status became " + state + " (outside the Theatre)", config);
         }
     }
 
@@ -189,36 +158,33 @@ final class ActivityCapture
                 {
                     pending.teamWiped = true;
                 }
-                finish(Activity.TOB, "team wipe (every party health orb shows dead)", config);
+                finish(Activity.TOB, "team wipe", config);
             }
             else if (fighting && occupied && pending != null && pending.teamWiped)
             {
                 // Entry-mode retry after a wipe starts another attempt.
-                start(Activity.TOB, true, "retry after a team wipe (party fighting again)", config);
+                start(Activity.TOB, "retry after a team wipe", config);
             }
         }
     }
 
     synchronized boolean playerDied(SaveReplayBufferForObsConfig config)
     {
-        boolean recording = pending != null && !pending.requested;
-        Activity activity = location != null ? location : recording ? pending.activity : null;
-        if (activity == null || !activity.enabled.test(config))
+        if (location == null || !location.enabled.test(config))
         {
             return false;
         }
-        if (activity == Activity.COX || activity == Activity.TOB || activity == Activity.TOA)
+        if (location == Activity.COX || location == Activity.TOB || location == Activity.TOA)
         {
             // Raids continue after a death, so it never saves; only a wipe or leaving ends the capture.
-            debug.accept(activity.label + " death ignored: raids continue after a death"
-                + (recording && pending.activity == activity ? "; capture continues." : "; no capture is recording."));
+            log.debug("{} death ignored: raids continue after a death", location.label);
             return true;
         }
-        if (pending == null || pending.activity != activity)
+        if (pending == null || pending.activity != location)
         {
             return false;
         }
-        finish(activity, "player death", config);
+        finish(location, "player death", config);
         return true;
     }
 
@@ -233,18 +199,17 @@ final class ActivityCapture
 
     private void finish(Activity activity, String reason, SaveReplayBufferForObsConfig config)
     {
-        if (pending != null && pending.activity == activity && !pending.requested
-            && (!pending.entered || !activity.enabled.test(config)))
+        if (pending != null && pending.activity == activity && !pending.requested && !activity.enabled.test(config))
         {
-            debug.accept(activity.label + " capture discarded (" + reason + "): "
-                + (pending.entered ? "capture was turned off mid-activity." : "you never entered."));
+            log.debug("{} capture discarded ({}): capture was turned off mid-activity", activity.label, reason);
             pending = null;
             return;
         }
-        end(activity, reason, config.activityPrePercent(), config.activityPostPercent(), config.rewardsDelay());
+        end(activity, reason, config);
     }
 
-    synchronized boolean end(Activity activity, String reason, int prePercent, int postPercent, int delaySeconds)
+    /** Schedules the save for the current session; returns false when no session for this activity exists. */
+    synchronized boolean end(Activity activity, String reason, SaveReplayBufferForObsConfig config)
     {
         if (pending == null || pending.activity != activity)
         {
@@ -256,21 +221,19 @@ final class ActivityCapture
         }
         Session session = pending;
         session.requested = true;
-        double activitySeconds = Math.max(0, clock.getAsLong() - session.started) / 1_000_000_000.0;
-        double pre = activitySeconds * percent(prePercent);
-        double post = activitySeconds * percent(postPercent);
-        long delayMillis = (long) Math.ceil((post + Math.max(0, delaySeconds)) * 1000);
-        debug.accept(String.format("%s capture ended: %s. Activity lasted %.0fs; saving it plus %.1fs pre-padding after"
-            + " %.1fs post-padding and %ds Rewards delay (%.1fs).",
-            activity.label, reason, activitySeconds, pre, post, Math.max(0, delaySeconds), delayMillis / 1000.0));
+        double activitySeconds = (clock.getAsLong() - session.started) / 1_000_000_000.0;
+        double pre = activitySeconds * config.activityPrePercent() / 100.0;
+        double post = activitySeconds * config.activityPostPercent() / 100.0;
+        long delayMillis = (long) Math.ceil((post + config.rewardsDelay()) * 1000);
+        log.debug("{} capture ended: {}. Activity lasted {}s; saving it plus {}s pre-padding after {}s post-padding and {}s Rewards delay",
+            activity.label, reason, Math.round(activitySeconds), Math.round(pre), Math.round(post), config.rewardsDelay());
         chat.accept("Saving your " + activity.label + " replay clip (" + duration(activitySeconds) + ") in "
             + (long) Math.ceil(delayMillis / 1000.0) + " seconds.");
-        long due = clock.getAsLong() + TimeUnit.MILLISECONDS.toNanos(delayMillis);
         scheduledCaptures.add(session);
         session.future = scheduler.schedule(() -> {
             synchronized (ActivityCapture.this)
             {
-                if (scheduledCaptures.remove(session) && clock.getAsLong() - due < MAX_AGE)
+                if (scheduledCaptures.remove(session))
                 {
                     save.accept(Math.max(1, (int) Math.ceil((clock.getAsLong() - session.started) / 1_000_000_000.0 + pre)));
                 }
@@ -286,11 +249,6 @@ final class ActivityCapture
         return total >= 3600
             ? String.format("%d:%02d:%02d", total / 3600, total / 60 % 60, total % 60)
             : String.format("%d:%02d", total / 60, total % 60);
-    }
-
-    private static double percent(int value)
-    {
-        return Math.max(0, Math.min(10, value)) / 100.0;
     }
 
     synchronized boolean capturing(Activity activity, SaveReplayBufferForObsConfig config)

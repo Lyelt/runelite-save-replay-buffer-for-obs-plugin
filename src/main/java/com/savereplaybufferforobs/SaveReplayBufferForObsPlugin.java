@@ -120,7 +120,6 @@ public class SaveReplayBufferForObsPlugin extends Plugin implements DisplaysExce
         }
         obsExceptionOverlay = new ObsExceptionOverlay(config, exception);
         overlayManager.add(obsExceptionOverlay);
-        log.debug("{}", exception.getMessage());
     }
 
     @Override
@@ -129,12 +128,6 @@ public class SaveReplayBufferForObsPlugin extends Plugin implements DisplaysExce
         obsExceptionOverlay = null;
     }
 
-    @Override
-    public void clearObsException(ObsException exception) {
-        if (obsExceptionOverlay != null && obsExceptionOverlay.isSameException(exception)) {
-            clearObsException();
-        }
-    }
 
     @Override
     public void showChatMessage(String message)
@@ -280,20 +273,13 @@ public class SaveReplayBufferForObsPlugin extends Plugin implements DisplaysExce
     {
         log.debug("Startup OBS Connection");
         reconnect();
-        activityCapture = new ActivityCapture(scheduledExecutorService, System::nanoTime, seconds -> obsClient.saveClip(seconds), message -> log.debug("{}", message), this::showChatMessage);
+        activityCapture = new ActivityCapture(scheduledExecutorService, System::nanoTime, seconds -> obsClient.saveClip(seconds), this::showChatMessage);
     }
 
     @Override
     protected void shutDown()
     {
-        if (activityCapture != null)
-        {
-            activityCapture.cancel();
-        }
-        if (healthcheck != null)
-        {
-            healthcheck.cancel(true);
-        }
+        activityCapture.cancel();
         clearObsException();
         if (this.obsClient != null) {
             log.debug("Shutdown OBS Connection");
@@ -346,7 +332,7 @@ public class SaveReplayBufferForObsPlugin extends Plugin implements DisplaysExce
             Player player = (Player) actor;
             if (player == client.getLocalPlayer())
             {
-                boolean proDeath = activityCapture != null && activityCapture.playerDied(config);
+                boolean proDeath = activityCapture.playerDied(config);
                 if (!proDeath && config.savePlayerDeath())
                 {
                     saveReplayBuffer(EventType.DEATH);
@@ -370,7 +356,7 @@ public class SaveReplayBufferForObsPlugin extends Plugin implements DisplaysExce
         if (actor == client.getLocalPlayer()
                 && actor.getAnimation() == AnimationID.HUMAN_DOOM_SCORPION_01_PLAYER_DEATH_01)
         {
-            boolean proDeath = activityCapture != null && activityCapture.playerDied(config);
+            boolean proDeath = activityCapture.playerDied(config);
             if (!proDeath && config.savePlayerDeath())
             {
                 saveReplayBuffer(EventType.DEATH);
@@ -397,9 +383,7 @@ public class SaveReplayBufferForObsPlugin extends Plugin implements DisplaysExce
     {
         // original source https://github.com/runelite/runelite/blob/f448dc9d0d0be8553500c2e992afabe643b57b2f/runelite-client/src/main/java/net/runelite/client/plugins/screenshot/ScreenshotPlugin.java#L349
         String chatMessage = event.getMessage();
-        if (activityCapture != null
-            && (event.getType() == ChatMessageType.GAMEMESSAGE || event.getType() == ChatMessageType.SPAM
-                || event.getType() == ChatMessageType.FRIENDSCHATNOTIFICATION))
+        if (event.getType() == ChatMessageType.GAMEMESSAGE)
         {
             activityCapture.chatMessage(chatMessage, config);
         }
@@ -554,7 +538,7 @@ public class SaveReplayBufferForObsPlugin extends Plugin implements DisplaysExce
     public void onGameStateChanged(GameStateChanged event)
     {
         // Logging out or hopping leaves the activity; a lost connection may reconnect into it.
-        if (activityCapture != null && (event.getGameState() == GameState.LOGIN_SCREEN || event.getGameState() == GameState.HOPPING))
+        if (event.getGameState() == GameState.LOGIN_SCREEN || event.getGameState() == GameState.HOPPING)
         {
             activityCapture.exited(event.getGameState() == GameState.HOPPING ? "hopped worlds" : "logged out", config);
         }
@@ -562,13 +546,13 @@ public class SaveReplayBufferForObsPlugin extends Plugin implements DisplaysExce
 
     private boolean capturedByActivity(String name)
     {
-        return activityCapture != null && activityCapture.capturing(ActivityCapture.forName(name), config);
+        return activityCapture.capturing(ActivityCapture.forName(name), config);
     }
 
     /** Returns false, falling back to the regular save, when no activity session was recorded. */
     private boolean captureActivity(ActivityCapture.Activity activity, String trigger)
     {
-        if (activityCapture != null && activityCapture.end(activity, trigger, config.activityPrePercent(), config.activityPostPercent(), config.rewardsDelay()))
+        if (activityCapture.end(activity, trigger, config))
         {
             return true;
         }
@@ -576,15 +560,6 @@ public class SaveReplayBufferForObsPlugin extends Plugin implements DisplaysExce
         showChatMessage(activity.label + " wasn't recorded as a full clip because its toggle was turned on partway through."
             + " Turn it on before entering to capture the whole run.");
         return false;
-    }
-
-    @Subscribe
-    public void onVarbitChanged(VarbitChanged event)
-    {
-        if (activityCapture != null && event.getVarbitId() == VarbitID.TOB_CLIENT_PARTYSTATUS)
-        {
-            activityCapture.theatreStateChanged(event.getValue(), config);
-        }
     }
 
     @Subscribe
@@ -610,7 +585,7 @@ public class SaveReplayBufferForObsPlugin extends Plugin implements DisplaysExce
     @Subscribe
     public void onGameTick(GameTick event)
     {
-        if (activityCapture != null && client.getGameState() == GameState.LOGGED_IN && client.getLocalPlayer() != null)
+        if (client.getGameState() == GameState.LOGGED_IN && client.getLocalPlayer() != null)
         {
             activityCapture.locationChanged(WorldPoint.fromLocalInstance(client, client.getLocalPlayer().getLocalLocation()),
                 client.getVarbitValue(VarbitID.RAIDS_CLIENT_INDUNGEON) == 1, config);
