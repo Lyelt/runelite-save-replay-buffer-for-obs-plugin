@@ -34,7 +34,6 @@ import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.Player;
-import net.runelite.api.ScriptID;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.events.*;
 import net.runelite.api.gameval.InterfaceID;
@@ -93,12 +92,12 @@ public class SaveReplayBufferForObsPlugin extends Plugin implements DisplaysExce
     @Inject
     private OverlayManager overlayManager;
 
-    @Inject
-    private ChatMessageManager chatMessageManager;
-
     private ObsExceptionOverlay obsExceptionOverlay = null;
 
     private ScheduledFuture<?> healthcheck;
+
+    @Inject
+    private ChatMessageManager chatMessageManager;
 
     private ActivityCapture activityCapture;
 
@@ -127,7 +126,6 @@ public class SaveReplayBufferForObsPlugin extends Plugin implements DisplaysExce
         overlayManager.remove(obsExceptionOverlay);
         obsExceptionOverlay = null;
     }
-
 
     @Override
     public void showChatMessage(String message)
@@ -202,6 +200,11 @@ public class SaveReplayBufferForObsPlugin extends Plugin implements DisplaysExce
 
     private void saveReplayBuffer(EventType eventType)
     {
+        if (activityCapture.inEnabledActivity(config))
+        {
+            log.debug("Skipping {} save: the activity capture covers it", eventType);
+            return;
+        }
         log.debug("Attempting to save OBS Replay Buffer");
         scheduledExecutorService.schedule(obsClient::saveReplayBuffer, getDelayTime(eventType), TimeUnit.SECONDS);
     }
@@ -209,7 +212,7 @@ public class SaveReplayBufferForObsPlugin extends Plugin implements DisplaysExce
     @Subscribe
     private void onScreenshotTaken(ScreenshotTaken event)
     {
-        if (config.saveOnScreenshot() && !capturedByActivity(event.getPath().getName())) {
+        if (config.saveOnScreenshot()) {
             saveReplayBuffer(EventType.SCREENSHOT);
         }
     }
@@ -330,13 +333,9 @@ public class SaveReplayBufferForObsPlugin extends Plugin implements DisplaysExce
         if (actor instanceof Player)
         {
             Player player = (Player) actor;
-            if (player == client.getLocalPlayer())
+            if (player == client.getLocalPlayer() && config.savePlayerDeath())
             {
-                boolean proDeath = activityCapture.playerDied(config);
-                if (!proDeath && config.savePlayerDeath())
-                {
-                    saveReplayBuffer(EventType.DEATH);
-                }
+                saveReplayBuffer(EventType.DEATH);
             }
             else if (player != client.getLocalPlayer()
                     && player.getCanvasTilePoly() != null
@@ -354,13 +353,10 @@ public class SaveReplayBufferForObsPlugin extends Plugin implements DisplaysExce
         // original source https://github.com/runelite/runelite/blob/f448dc9d0d0be8553500c2e992afabe643b57b2f/runelite-client/src/main/java/net/runelite/client/plugins/screenshot/ScreenshotPlugin.java#L312
         Actor actor = animationChanged.getActor();
         if (actor == client.getLocalPlayer()
-                && actor.getAnimation() == AnimationID.HUMAN_DOOM_SCORPION_01_PLAYER_DEATH_01)
+                && actor.getAnimation() == AnimationID.HUMAN_DOOM_SCORPION_01_PLAYER_DEATH_01
+                && config.savePlayerDeath())
         {
-            boolean proDeath = activityCapture.playerDied(config);
-            if (!proDeath && config.savePlayerDeath())
-            {
-                saveReplayBuffer(EventType.DEATH);
-            }
+            saveReplayBuffer(EventType.DEATH);
         }
     }
 
@@ -378,15 +374,12 @@ public class SaveReplayBufferForObsPlugin extends Plugin implements DisplaysExce
     private static final Pattern UNTRADEABLE_DROP_PATTERN = Pattern.compile(".*Untradeable drop: ([^<>]+)(?:</col>)?");
     private static final Pattern DUEL_END_PATTERN = Pattern.compile("You have now (won|lost) ([0-9,]+) duels?\\.");
 
+
     @Subscribe
     public void onChatMessage(ChatMessage event)
     {
         // original source https://github.com/runelite/runelite/blob/f448dc9d0d0be8553500c2e992afabe643b57b2f/runelite-client/src/main/java/net/runelite/client/plugins/screenshot/ScreenshotPlugin.java#L349
         String chatMessage = event.getMessage();
-        if (event.getType() == ChatMessageType.GAMEMESSAGE)
-        {
-            activityCapture.chatMessage(chatMessage, config);
-        }
 
         if (chatMessage.equals(CHEST_LOOTED_MESSAGE) && config.saveRewards())
         {
@@ -408,10 +401,7 @@ public class SaveReplayBufferForObsPlugin extends Plugin implements DisplaysExce
             Matcher m = BOSSKILL_MESSAGE_PATTERN.matcher(chatMessage);
             if (m.find())
             {
-                if (!capturedByActivity(m.group(1)))
-                {
-                    saveReplayBuffer(EventType.BOSS_KILL);
-                }
+                saveReplayBuffer(EventType.BOSS_KILL);
             }
         }
 
@@ -464,13 +454,6 @@ public class SaveReplayBufferForObsPlugin extends Plugin implements DisplaysExce
         // original source https://github.com/runelite/runelite/blob/f448dc9d0d0be8553500c2e992afabe643b57b2f/runelite-client/src/main/java/net/runelite/client/plugins/screenshot/ScreenshotPlugin.java#L553
         int groupId = event.getGroupId();
 
-        ActivityCapture.Activity activity = ActivityCapture.forRewards(groupId);
-        // Doom opens this between delves: only the actual loot-claim script triggers a capture.
-        if (activity == ActivityCapture.Activity.DOOM
-            || (activity != null && activity.enabled.test(config) && captureActivity(activity, "rewards interface opened")))
-        {
-            return;
-        }
         switch (groupId)
         {
             case InterfaceID.QUESTSCROLL:
@@ -535,44 +518,6 @@ public class SaveReplayBufferForObsPlugin extends Plugin implements DisplaysExce
     }
 
     @Subscribe
-    public void onGameStateChanged(GameStateChanged event)
-    {
-        // Logging out or hopping leaves the activity; a lost connection may reconnect into it.
-        if (event.getGameState() == GameState.LOGIN_SCREEN || event.getGameState() == GameState.HOPPING)
-        {
-            activityCapture.exited(event.getGameState() == GameState.HOPPING ? "hopped worlds" : "logged out", config);
-        }
-    }
-
-    private boolean capturedByActivity(String name)
-    {
-        return activityCapture.capturing(ActivityCapture.forName(name), config);
-    }
-
-    /** Returns false, falling back to the regular save, when no activity session was recorded. */
-    private boolean captureActivity(ActivityCapture.Activity activity, String trigger)
-    {
-        if (activityCapture.end(activity, trigger, config))
-        {
-            return true;
-        }
-        log.debug("{} capture skipped ({}): no session was started", activity.label, trigger);
-        showChatMessage(activity.label + " wasn't recorded as a full clip because its toggle was turned on partway through."
-            + " Turn it on before entering to capture the whole run.");
-        return false;
-    }
-
-    @Subscribe
-    public void onScriptPostFired(ScriptPostFired event)
-    {
-        if (event.getScriptId() == ScriptID.DOM_LOOT_CLAIM && config.captureDoom()
-            && !captureActivity(ActivityCapture.Activity.DOOM, "Doom loot claimed") && config.saveRewards())
-        {
-            saveReplayBuffer(EventType.CHEST_REWARD);
-        }
-    }
-
-    @Subscribe
     public void onPlayerLootReceived(final PlayerLootReceived playerLootReceived)
     {
         // original source https://github.com/runelite/runelite/blob/f448dc9d0d0be8553500c2e992afabe643b57b2f/runelite-client/src/main/java/net/runelite/client/plugins/screenshot/ScreenshotPlugin.java#324
@@ -583,16 +528,22 @@ public class SaveReplayBufferForObsPlugin extends Plugin implements DisplaysExce
     }
 
     @Subscribe
+    public void onGameStateChanged(GameStateChanged event)
+    {
+        // Logging out or hopping leaves the activity; a lost connection may reconnect into it.
+        if (event.getGameState() == GameState.LOGIN_SCREEN || event.getGameState() == GameState.HOPPING)
+        {
+            activityCapture.exited(event.getGameState() == GameState.HOPPING ? "hopped worlds" : "logged out", config);
+        }
+    }
+
+    @Subscribe
     public void onGameTick(GameTick event)
     {
         if (client.getGameState() == GameState.LOGGED_IN && client.getLocalPlayer() != null)
         {
             activityCapture.locationChanged(WorldPoint.fromLocalInstance(client, client.getLocalPlayer().getLocalLocation()),
                 client.getVarbitValue(VarbitID.RAIDS_CLIENT_INDUNGEON) == 1, config);
-            activityCapture.theatrePartyChanged(client.getVarbitValue(VarbitID.TOB_CLIENT_WAVEPROGRESS_TYPE) != 0,
-                new int[]{client.getVarbitValue(VarbitID.TOB_CLIENT_P0), client.getVarbitValue(VarbitID.TOB_CLIENT_P1),
-                    client.getVarbitValue(VarbitID.TOB_CLIENT_P2), client.getVarbitValue(VarbitID.TOB_CLIENT_P3),
-                    client.getVarbitValue(VarbitID.TOB_CLIENT_P4)}, config);
         }
         if (!shouldTakeScreenshot)
         {

@@ -27,24 +27,20 @@ you can see the session listed in OBS in the "WebSocket Server Settings".
 ## Full activity captures (Replay Buffer Pro)
 
 With the [Replay Buffer Pro](https://github.com/JoshuaPotter/replay-buffer-pro) OBS plugin installed, the plugin
-can save a clip covering an entire activity instead of the whole buffer. Turn on any of **CoX**, **ToB**, **ToA**,
-**Inferno**, **Colosseum** and **Doom** in the **Replay Buffer Pro** section before entering. They are off by default.
+can save a clip covering an entire activity instead of the whole buffer. Turn on any of **CoX** (including Challenge Mode),
+**ToB**, **ToA**, **Inferno**, **Colosseum** and **Doom** in the **Replay Buffer Pro** section before entering.
+They are off by default.
 
-| Activity | Capture starts | Capture ends |
-| --- | --- | --- |
-| CoX (including CM) | Entering the raid | Rewards or leaving |
-| ToB (all modes) | Entering the raid | Rewards, a team wipe, or leaving |
-| ToA (all modes) | Entering the raid | Rewards or leaving |
-| Inferno | Entering | Completion, death, or leaving |
-| Colosseum | Entering the arena | Reward chest, death, or leaving |
-| Doom | Entering the first delve | Claiming loot, death, or leaving |
-
-- Deaths in CoX, ToB and ToA never save a clip, because the raid continues. Only a wipe or leaving ends it.
-- Logging out or hopping counts as leaving. A lost connection that reconnects into the same run keeps the capture going.
-- **Activity pre-padding** (default 1% of the activity length) adds footage before the start. **Activity post-padding** (default 5%) waits after the end, plus the **Rewards** delay, before saving.
-- If the OBS replay buffer is shorter than the requested clip, Replay Buffer Pro saves the whole buffer instead, and the plugin warns you in chat.
-- While an activity is enabled and being captured, it replaces the regular boss-kill, death, screenshot and rewards saves for that activity. If no capture was running (for example, the toggle was turned on mid-raid), the regular saves apply.
-- Unless you turn off **Chat messages**, a chat message tells you when a recording starts, when its clip will be saved, and when a clip couldn't be saved and what to fix. What triggered each start and end is written to the RuneLite debug log (`--debug`).
+- Recording starts when you enter the activity and ends when you leave it, including being sent out after a wipe or
+  death, logging out, or hopping. Room changes and Doom delves stay in the same recording. A lost connection that
+  reconnects into the same run keeps recording; logging back in inside the activity starts a new recording.
+- **Activity pre-padding** (default 1% of the activity length) adds footage before the start. **Activity post-padding**
+  (default 5%) keeps recording after you leave, plus the **Rewards** delay, before the clip is saved.
+- Inside an enabled activity, the regular saves (boss kills, deaths, rewards, screenshots and so on) are skipped,
+  because the activity clip covers them.
+- If the OBS replay buffer is shorter than the clip, Replay Buffer Pro saves the whole buffer and the plugin warns you in chat.
+- Unless you turn off **Chat messages**, chat tells you when a recording starts, when its clip will be saved, and when a
+  clip couldn't be saved and what to fix. Details are written to the RuneLite debug log (`--debug`).
 
 Your OBS replay buffer must be long enough for the whole activity plus padding, up to Replay Buffer Pro's maximum of 6 hours.
 The plugin sends OBS WebSocket `CallVendorRequest` with vendor `replay-buffer-pro`, request `SaveClip` and

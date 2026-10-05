@@ -35,25 +35,25 @@ import static com.savereplaybufferforobs.Constants.PLUGIN_IDENTIFIER;
 @ConfigGroup(PLUGIN_IDENTIFIER)
 public interface SaveReplayBufferForObsConfig extends Config
 {
-    @ConfigSection(name = "Replay Buffer Pro", description = "Capture activity durations using Replay Buffer Pro's SaveClip command", position = 4)
+    @ConfigSection(name = "Replay Buffer Pro", description = "Save a clip of each enabled activity, from entering until leaving, using the Replay Buffer Pro OBS plugin", position = 4)
     String proSection = "replayBufferPro";
 
-    @ConfigItem(keyName = "captureCox", name = "CoX", description = "Capture full CoX footage on rewards or exit, including Challenge Mode. Enable before entering.", section = proSection, position = 0)
+    @ConfigItem(keyName = "captureCox", name = "CoX", description = "Save each Chambers of Xeric raid, including Challenge Mode, when you leave.", section = proSection, position = 0)
     default boolean captureCox() { return false; }
 
-    @ConfigItem(keyName = "captureTob", name = "ToB", description = "Capture full ToB footage on rewards, team wipe, or exit. Enable before entering.", section = proSection, position = 1)
+    @ConfigItem(keyName = "captureTob", name = "ToB", description = "Save each Theatre of Blood raid when you leave.", section = proSection, position = 1)
     default boolean captureTob() { return false; }
 
-    @ConfigItem(keyName = "captureToa", name = "ToA", description = "Capture full ToA footage on rewards or exit, including final failure. Enable before entering.", section = proSection, position = 2)
+    @ConfigItem(keyName = "captureToa", name = "ToA", description = "Save each Tombs of Amascut raid when you leave.", section = proSection, position = 2)
     default boolean captureToa() { return false; }
 
-    @ConfigItem(keyName = "captureInferno", name = "Inferno", description = "Capture full Inferno footage on completion, death, or exit, including breaks. Enable before entering.", section = proSection, position = 3)
+    @ConfigItem(keyName = "captureInferno", name = "Inferno", description = "Save each Inferno run when you leave.", section = proSection, position = 3)
     default boolean captureInferno() { return false; }
 
-    @ConfigItem(keyName = "captureColosseum", name = "Colosseum", description = "Capture full Colosseum footage on rewards, death, or exit, including intermissions. Enable before entering.", section = proSection, position = 4)
+    @ConfigItem(keyName = "captureColosseum", name = "Colosseum", description = "Save each Fortis Colosseum run when you leave.", section = proSection, position = 4)
     default boolean captureColosseum() { return false; }
 
-    @ConfigItem(keyName = "captureDoom", name = "Doom", description = "Capture the whole Doom session on reward claim, death, or exit, including all delves. Enable before entering.", section = proSection, position = 5)
+    @ConfigItem(keyName = "captureDoom", name = "Doom", description = "Save each Doom of Mokhaiotl run, across all delves, when you leave.", section = proSection, position = 5)
     default boolean captureDoom() { return false; }
 
     @Range(min = 0, max = 10)
@@ -61,7 +61,7 @@ public interface SaveReplayBufferForObsConfig extends Config
     default int activityPrePercent() { return 1; }
 
     @Range(min = 0, max = 10)
-    @ConfigItem(keyName = "activityPostPercent", name = "Activity post-padding (%)", description = "Wait this percentage of activity duration after the capture trigger, plus Rewards delay. Default 5%.", section = proSection, position = 7)
+    @ConfigItem(keyName = "activityPostPercent", name = "Activity post-padding (%)", description = "Keep recording this percentage of the activity length after you leave, plus the Rewards delay, before saving. Default 5%.", section = proSection, position = 7)
     default int activityPostPercent() { return 5; }
 
     @ConfigItem(keyName = "chatMessages", name = "Chat messages", description = "Show chat messages when a recording starts or saves, and when a clip couldn't be saved.", section = proSection, position = 8)
