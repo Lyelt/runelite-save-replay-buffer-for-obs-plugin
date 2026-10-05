@@ -130,9 +130,9 @@ final class ActivityCapture
         double activitySeconds = (clock.getAsLong() - activityStarted) / 1_000_000_000.0;
         double pre = activitySeconds * config.activityPrePercent() / 100.0;
         double post = activitySeconds * config.activityPostPercent() / 100.0;
-        long delayMillis = (long) Math.ceil((post + config.rewardsDelay()) * 1000);
-        log.debug("{} capture ended: {}. Activity lasted {}s; saving it plus {}s pre-padding after {}s post-padding and {}s Rewards delay",
-            location.label, reason, Math.round(activitySeconds), Math.round(pre), Math.round(post), config.rewardsDelay());
+        long delayMillis = (long) Math.ceil(post * 1000);
+        log.debug("{} capture ended: {}. Activity lasted {}s; saving it plus {}s pre-padding after {}s post-padding",
+            location.label, reason, Math.round(activitySeconds), Math.round(pre), Math.round(post));
         chat.accept("Saving your " + location.label + " replay clip (" + duration(activitySeconds) + ") in "
             + (long) Math.ceil(delayMillis / 1000.0) + " seconds.");
         scheduledSaves.removeIf(Future::isDone);

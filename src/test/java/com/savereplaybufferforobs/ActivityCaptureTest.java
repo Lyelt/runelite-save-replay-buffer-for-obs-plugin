@@ -91,21 +91,16 @@ public class ActivityCaptureTest
     }
 
     @Test
-    public void paddingRewardsDelayAndSchedulingLagAreIncluded()
+    public void paddingAndSchedulingLagAreIncluded()
     {
-        SaveReplayBufferForObsConfig rewardsDelay = new SaveReplayBufferForObsConfig()
-        {
-            public boolean captureToa() { return true; }
-            public int rewardsDelay() { return 5; }
-        };
-        capture.locationChanged(region(15698), false, rewardsDelay);
+        capture.locationChanged(region(15698), false, config);
         now = TimeUnit.SECONDS.toNanos(100);
-        capture.locationChanged(OUTSIDE, false, rewardsDelay);
-        assertEquals(Long.valueOf(6000), delays.get(0));
+        capture.locationChanged(OUTSIDE, false, config);
+        assertEquals(Long.valueOf(1000), delays.get(0)); // 1% post-padding.
         assertTrue(requests.isEmpty());
-        now = TimeUnit.MILLISECONDS.toNanos(106_500); // 500 ms scheduler lag.
+        now = TimeUnit.MILLISECONDS.toNanos(101_500); // 500 ms scheduler lag.
         run(0);
-        assertEquals(Integer.valueOf(108), requests.get(0));
+        assertEquals(Integer.valueOf(103), requests.get(0)); // 101.5s elapsed plus 1% pre-padding.
     }
 
     @Test

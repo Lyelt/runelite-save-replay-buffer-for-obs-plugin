@@ -61,7 +61,7 @@ public interface SaveReplayBufferForObsConfig extends Config
     default int activityPrePercent() { return 1; }
 
     @Range(min = 0, max = 10)
-    @ConfigItem(keyName = "activityPostPercent", name = "Activity post-padding (%)", description = "Keep recording this percentage of the activity length after you leave, plus the Rewards delay, before saving. Default 1%.", section = proSection, position = 7)
+    @ConfigItem(keyName = "activityPostPercent", name = "Activity post-padding (%)", description = "Keep recording this percentage of the activity length after you leave before saving. Default 1%.", section = proSection, position = 7)
     default int activityPostPercent() { return 1; }
 
     @ConfigItem(keyName = "chatMessages", name = "Chat messages", description = "Show chat messages when a recording starts or saves, and when a clip couldn't be saved.", section = proSection, position = 8)
